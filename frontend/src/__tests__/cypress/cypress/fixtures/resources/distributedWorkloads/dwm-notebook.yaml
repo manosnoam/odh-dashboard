@@ -1,0 +1,53 @@
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  name: dwm-1-notebook
+  namespace: dwm-1-test
+spec:
+  template:
+    spec:
+      containers:
+      - name: dwm-1-notebook
+        image: image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/s2i-generic-data-science-notebook:2024.2
+        imagePullPolicy: Always
+        env:
+        - name: JUPYTER_ENABLE_LAB
+          value: "true"
+        ports:
+        - name: notebook-port
+          containerPort: 8888
+          protocol: TCP
+        command:
+        - "/bin/bash"
+        - "-c"
+        args:
+        - |
+          pip install codeflare_sdk
+          
+          cat > /home/jovyan/setup_cluster.py <<EOF
+          import codeflare_sdk
+          from codeflare_sdk import Cluster, ClusterConfiguration, generate_cert
+
+          def setup_cluster():
+              cluster_config = ClusterConfiguration(
+                  name='dwm-1-cluster',
+                  namespace='dwm-1-test',
+                  num_workers=1,
+                  head_cpu_requests='500m',
+                  head_cpu_limits='500m',
+                  worker_memory_requests='1Gi',
+                  worker_memory_limits='1Gi'
+              )
+              ray_cluster = Cluster(cluster_config)
+              ray_cluster.up()
+              ray_cluster.wait_ready()
+              return ray_cluster
+
+          # Usage:
+          # cluster = setup_cluster()
+          # ... use cluster ...
+          # cluster.delete()
+          EOF
+
+          # Start Jupyter server
+          start-notebook.sh --ip=0.0.0.0 --port=8888 --no-browser

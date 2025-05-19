@@ -40,52 +40,70 @@ describe('Verify that all the URLs referenced in the Manifest directory are oper
         );
 
         // Call the Node.js task to check all URLs concurrently
-        cy.task<{ url: string; status: number; error?: string }[]>(
-          'validateHttpsUrls',
-          filteredUrls,
-        ).then((results) => {
-          results.forEach(({ url, status, error }) => {
-            const isValid = validStatusCodes.has(status);
-            let logMessageSegment = '';
+        const checkUrls = (urlsToCheck: string[], retryCount = 0) => {
+          cy.task<{ url: string; status: number; error?: string }[]>(
+            'validateHttpsUrls',
+            urlsToCheck,
+          ).then((results) => {
+            // Filter URLs that need retry (429 status)
+            const urlsToRetry = results
+              .filter(({ status }) => status === 429)
+              .map(({ url }) => url);
 
-            if (isValid) {
-              logMessageSegment = `✅ ${url} - Status: ${status}`;
-            } else {
-              switch (status) {
-                case -1:
-                  logMessageSegment = `TIMEOUT ❌ ${url} - Error Code: ${status}`;
-                  break;
-                case -2:
-                  logMessageSegment = `REDIRECT_MAX ❌ ${url} - Error Code: ${status}`;
-                  break;
-                case -3:
-                  logMessageSegment = `REDIRECT_INVALID ❌ ${url} - Error Code: ${status}`;
-                  break;
-                case -4:
-                  logMessageSegment = `ABORTED ❌ ${url} - Error Code: ${status}`;
-                  break;
-                case -5:
-                  logMessageSegment = `NETWORK_ERROR ❌ ${url} - Error Code: ${status}`;
-                  break;
-                default:
-                  logMessageSegment = `❌ ${url} - Status: ${status} (Expected one of: ${Array.from(
-                    validStatusCodes,
-                  ).join(', ')})`;
-              }
-              if (error) {
-                logMessageSegment += ` (Details: ${error})`;
-              }
+            // If we have URLs to retry and haven't exceeded max retries
+            if (urlsToRetry.length > 0 && retryCount < 3) {
+              cy.log(
+                `⚠️ Rate limited (429) for ${
+                  urlsToRetry.length
+                } URLs, waiting 3 seconds before retry ${retryCount + 1}/3`,
+              );
+              // eslint-disable-next-line cypress/no-unnecessary-waiting
+              cy.wait(3000).then(() => {
+                checkUrls(urlsToRetry, retryCount + 1);
+              });
             }
 
-            cy.step(logMessageSegment);
-            // softTrue(
-            //   isValid,
-            //   `URL ${url} should return one of the valid status codes (${Array.from(
-            //     validStatusCodes,
-            //   ).join(', ')}), but was ${status}${error ? ` - Details: ${error}` : ''}`,
-            // );
+            // Process all results
+            results.forEach(({ url, status, error }) => {
+              const isValid = validStatusCodes.has(status);
+              let logMessageSegment = '';
+
+              if (isValid) {
+                logMessageSegment = `✅ ${url} - Status: ${status}`;
+              } else {
+                switch (status) {
+                  case -1:
+                    logMessageSegment = `TIMEOUT ❌ ${url} - Error Code: ${status}`;
+                    break;
+                  case -2:
+                    logMessageSegment = `REDIRECT_MAX ❌ ${url} - Error Code: ${status}`;
+                    break;
+                  case -3:
+                    logMessageSegment = `REDIRECT_INVALID ❌ ${url} - Error Code: ${status}`;
+                    break;
+                  case -4:
+                    logMessageSegment = `ABORTED ❌ ${url} - Error Code: ${status}`;
+                    break;
+                  case -5:
+                    logMessageSegment = `NETWORK_ERROR ❌ ${url} - Error Code: ${status}`;
+                    break;
+                  default:
+                    logMessageSegment = `❌ ${url} - Status: ${status} (Expected one of: ${Array.from(
+                      validStatusCodes,
+                    ).join(', ')})`;
+                }
+                if (error) {
+                  logMessageSegment += ` (Details: ${error})`;
+                }
+              }
+
+              cy.step(logMessageSegment);
+            });
           });
-        });
+        };
+
+        // Start checking URLs
+        checkUrls(filteredUrls);
       });
     },
   );

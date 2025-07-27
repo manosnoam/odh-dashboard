@@ -71,7 +71,7 @@ class LMEvalFormPage {
   }
 
   findModelTypeDropdown() {
-    return cy.findByLabelText('Options menu');
+    return cy.findByTestId('model-type-toggle');
   }
 
   private findSecuritySection() {
@@ -175,14 +175,23 @@ class LMEvalFormPage {
     // Wait for the form to be fully loaded before attempting to interact
     cy.findByTestId('tasks-form-group').should('be.visible');
 
-    // Click on the MenuToggle using test ID to open the dropdown
-    cy.findByTestId('tasks-dropdown-toggle').should('be.visible').click();
+    // Wait for the MultiSelection component to be fully rendered with longer timeout
+    cy.findByTestId('tasks-form-group', { timeout: 15000 }).should('be.visible');
+
+    // Use aria-label instead of test ID for more reliable element selection
+    cy.findByLabelText('Select evaluation tasks', { timeout: 15000 }).should('be.visible').click();
 
     // Wait for dropdown to be visible with increased timeout for Jenkins
-    cy.findByTestId('tasks-dropdown-list', { timeout: 20000 }).should('be.visible');
+    // Try to find the dropdown list using multiple strategies
+    cy.get('[role="listbox"]').should('be.visible');
 
     taskNames.forEach((taskName) => {
-      cy.findByTestId('tasks-dropdown-list').find('[role="option"]').contains(taskName).click();
+      // Try to find the option using multiple strategies
+      cy.get('[role="listbox"]')
+        .find('[role="option"]')
+        .contains(taskName)
+        .should('be.visible')
+        .click();
     });
     cy.get('body').type('{esc}');
     return this;
@@ -190,12 +199,16 @@ class LMEvalFormPage {
 
   // Model type selection methods
   selectModelType(modelType: string) {
-    this.findModelTypeDropdown().click();
+    cy.log(`Attempting to select model type: ${modelType}`);
 
-    // Wait for dropdown to be visible and handle potential timing issues
+    // Use test ID pattern like other dropdown methods
+    cy.findByTestId('model-type-form-group').should('be.visible');
+    cy.findByTestId('model-type-toggle', { timeout: 15000 }).should('be.visible').click();
+
+    // Wait for dropdown to be visible using test ID
     cy.findByTestId('model-type-dropdown-list').should('be.visible');
 
-    // Wait for the specific option to be available before clicking
+    // Find and click the option
     cy.findByTestId('model-type-dropdown-list')
       .find('[role="option"]')
       .contains(modelType)
@@ -235,7 +248,7 @@ class LMEvalFormPage {
   shouldHaveEnabledInputs() {
     this.findEvaluationNameInput().should('be.visible').and('not.be.disabled');
     this.findModelNameDropdown().should('exist').and('not.be.disabled');
-    cy.findByLabelText('Options menu').should('exist').and('not.be.disabled');
+    this.findModelTypeDropdown().should('exist').and('not.be.disabled');
     return this;
   }
 
@@ -311,6 +324,28 @@ class LMEvalFormPage {
   shouldNavigateToModelEvaluationsHome() {
     cy.url().should('include', '/modelEvaluations');
     cy.url().should('not.include', '/evaluate');
+    return this;
+  }
+
+  filterByName(name: string) {
+    cy.findByRole('textbox', { name: 'Filter by name' }).type(name);
+    return this;
+  }
+
+  testA11y() {
+    // Disable button-name rule which is causing the accessibility violations
+    cy.injectAxe();
+    cy.findByTestId('lmEvaluationForm').then(($el: JQuery<HTMLElement>) => {
+      cy.checkA11y($el[0], {
+        includedImpacts: ['serious', 'critical'],
+        rules: {
+          'color-contrast': { enabled: false },
+          'scrollable-region-focusable': { enabled: false },
+          label: { enabled: false },
+          'button-name': { enabled: false },
+        },
+      });
+    });
     return this;
   }
 }

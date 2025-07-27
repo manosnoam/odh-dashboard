@@ -1,5 +1,5 @@
 import { lmEvalPage } from '#~/__tests__/cypress/cypress/pages/lmEval/lmEvalPage';
-import { lmEvalFormPage } from '#~/__tests__/cypress/cypress/pages/lmEval/lmEval';
+import { lmEvalFormPage } from '#~/__tests__/cypress/cypress/pages/lmEval/lmEvalFormPage';
 import { execWithOutput } from './oc_commands/baseCommands';
 import type { createModelTestSetup } from './modelTestSetup';
 import { generateTestUUID } from './uuidGenerator';
@@ -228,7 +228,7 @@ const waitForEvaluationToAppear = (evaluationName: string): void => {
 
   // Filter for the evaluation to make sure it's there
   cy.step(`Filter for the evaluation run '${evaluationName}'`);
-  lmEvalPage.filterByName(evaluationName);
+  lmEvalFormPage.filterByName(evaluationName);
   lmEvalPage.findEvaluationRow(evaluationName).should('be.visible');
   lmEvalPage.findEvaluationDataLabel('Evaluation').should('contain.text', evaluationName);
 };
@@ -362,7 +362,7 @@ export const waitForEvaluationRun = (
   lmEvalPage.selectProjectByName(projectName);
 
   cy.step(`Filter for the evaluation run '${evaluationName}'`);
-  lmEvalPage.filterByName(evaluationName);
+  lmEvalFormPage.filterByName(evaluationName);
 
   // Wait for the evaluation run to reach the expected status
   cy.step(`Wait for evaluation run '${evaluationName}' to reach ${status}`);
@@ -379,12 +379,30 @@ export const navigateToLMEvalEvaluationForm = (projectName?: string): void => {
   const projectText = projectName || 'default';
   cy.step(`Navigate to evaluation form of project ${projectText}`);
 
+  // Add debugging to understand the page state
+  cy.log('Current URL before navigation:');
+  cy.url().then((url) => cy.log(url));
+
   // Select project if provided
   if (projectName) {
+    cy.log(`Selecting project: ${projectName}`);
     lmEvalPage.selectProjectByName(projectName);
   }
 
+  // Debug: Check what elements are present on the page
+  cy.log('Checking page elements before clicking evaluate button:');
+  cy.get('body').then(($body) => {
+    cy.log(
+      `Body contains 'evaluate-model-button': ${
+        $body.find('[data-testid="evaluate-model-button"]').length > 0
+      }`,
+    );
+    cy.log(`Body contains 'evaluate': ${$body.text().includes('evaluate')}`);
+    cy.log(`Body contains 'Evaluate': ${$body.text().includes('Evaluate')}`);
+  });
+
   // Click evaluate button and verify navigation
+  cy.log('Attempting to find and click evaluate button');
   lmEvalPage.findEvaluateModelButton().should('exist').click();
 
   // Add URL and form verifications in the test

@@ -76,6 +76,7 @@ const LMEvalResult: React.FC = () => {
         )
       }
       provideChildrenPadding
+      titleTestId="evaluation-details-title"
     >
       {evaluation && <LMEvalResultTable results={results} />}
     </LMEvalApplicationPage>

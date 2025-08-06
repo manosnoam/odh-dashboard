@@ -121,7 +121,7 @@ class LMEvalPage {
   }
 
   findEvaluationDetailsTitle() {
-    return cy.get('h1');
+    return cy.get('[data-testid="evaluation-details-title"]');
   }
 
   findEvaluationTableRows() {

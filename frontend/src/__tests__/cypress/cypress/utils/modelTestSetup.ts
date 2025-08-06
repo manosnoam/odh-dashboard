@@ -388,7 +388,7 @@ export const createModelTestSetup = (modelTestConfig: ModelTestConfig): ModelTes
 // Helper function to load test configuration from YAML file
 export const loadTestConfig = (
   setupName: string,
-  configPath = 'e2e/lmEval/test-config.yaml',
+  configPath: string,
 ): Cypress.Chainable<ModelTestConfig> =>
   cy.fixture(configPath).then((yamlString: string) => {
     try {

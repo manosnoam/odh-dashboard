@@ -33,6 +33,7 @@ type LMEvalApplicationPageProps = {
   subtext?: React.ReactNode;
   loadingContent?: React.ReactNode;
   noHeader?: boolean;
+  titleTestId?: string;
 };
 
 const LMEvalApplicationPage: React.FC<LMEvalApplicationPageProps> = ({
@@ -54,6 +55,7 @@ const LMEvalApplicationPage: React.FC<LMEvalApplicationPageProps> = ({
   subtext,
   loadingContent,
   noHeader,
+  titleTestId,
 }) => {
   const renderHeader = () => (
     <PageSection hasBodyWrapper={false}>
@@ -64,7 +66,7 @@ const LMEvalApplicationPage: React.FC<LMEvalApplicationPageProps> = ({
             alignItems={{ default: 'alignItemsFlexStart' }}
           >
             <FlexItem flex={{ default: 'flex_1' }}>
-              <Content component="h1" data-testid="app-page-title">
+              <Content component="h1" data-testid={titleTestId || 'app-page-title'}>
                 {title}
               </Content>
               <Stack hasGutter>

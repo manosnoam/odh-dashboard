@@ -43,7 +43,7 @@ describe(
       cy.step('Login to the application');
       cy.visitWithLogin('/', HTPASSWD_CLUSTER_ADMIN_USER);
 
-      loadTestConfig('dynamic').then((config) => {
+      loadTestConfig('dynamic', 'e2e/lmEval/test-config.yaml').then((config) => {
         dynamicConfig = config;
         dynamicTestSetup = createModelTestSetup(config);
         dynamicTestSetup.setupTest();

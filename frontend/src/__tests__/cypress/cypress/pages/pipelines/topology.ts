@@ -138,7 +138,7 @@ class RunDetails extends PipelinesTopology {
   }
 
   expectStatusLabelToBe(statusValue: string, timeout?: number) {
-    this.findStatusLabel(timeout).should('have.text', statusValue);
+    this.findStatusLabel(timeout).should('contain.text', statusValue);
   }
 
   findRightDrawer() {

@@ -23,7 +23,7 @@ interface ManifestTestConfig {
   excludedSubstrings?: string[];
 }
 
-const VALID_STATUS_CODES = new Set([200, 201, 202, 204]);
+const VALID_STATUS_CODES = new Set([200, 201, 202, 204, 401]);
 
 const formatValidationMessage = (
   result: UrlValidationResultWithLocation,

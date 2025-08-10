@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:40
+FROM quay.io/fedora/fedora:42
 
 ARG USER=cypress
 ARG USER_HOME=/home/$USER
@@ -6,9 +6,9 @@ ARG NPM_CACHE=/opt/app-root/src/.npm-global
 ARG CYPRESS_CACHE=$USER_HOME/.cypress-cache
 ARG CHROME=https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
 ARG OCP_CLI=https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
-ARG NVM_INSTALLER=https://raw.githubusercontent.com/creationix/nvm/v0.39.7/install.sh
+ARG NVM_INSTALLER=https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh
 ARG NODE_VERSION=v20.18.0
-ARG OCM_CLI=https://github.com/openshift-online/ocm-cli/releases/download/v1.0.2/ocm-linux-amd64
+ARG OCM_CLI=https://github.com/openshift-online/ocm-cli/releases/download/v1.0.7/ocm-linux-amd64
 
 USER root
 
@@ -40,6 +40,7 @@ RUN dnf install --nodocs -y \
     krb5-workstation \
     python3-pip \
     curl \
+    openssl \
     "$CHROME"
 
 # Install OCP client
@@ -59,7 +60,7 @@ RUN rm -rf /var/cache/yum
 # Set capability to adjust OOM score for Node
 RUN echo CAP_SYS_NICE >> /etc/security/limits.conf
 
-# Copy NodeJS packages lists (json files) from "frontend" directory 
+# Copy NodeJS packages lists (json files) from "frontend" directory
 WORKDIR $USER_HOME
 COPY ./frontend/package*.json ./
 RUN chown $USER:0 ./*
@@ -70,23 +71,25 @@ ENV USER $USER
 ENV HOME $USER_HOME
 ENV NVM_DIR $USER_HOME/nvm
 ENV NODE_PATH "$NVM_DIR/versions/node/$NODE_VERSION/lib/node_modules"
-ENV PATH "$NVM_DIR/versions/node/$NODE_VERSION/bin:/bin:$HOME/.local/bin:/root/.local/bin:/usr/local/bin:$PATH"
+ENV PATH "$NVM_DIR/versions/node/$NODE_VERSION/bin:/bin:$HOME/.local/bin:/root/.local/bin:/usr/local/bin:$NPM_CACHE/bin:$PATH"
 RUN mkdir -p $NVM_DIR
 
-# Install Node Version Manager, NodeJS and the packages for CI (package-lock.json) 
+# Install Node Version Manager, NodeJS and the packages for CI (package-lock.json)
 RUN curl -o- $NVM_INSTALLER | bash
 RUN /bin/bash -c "source $NVM_DIR/nvm.sh && \
     nvm install $NODE_VERSION && \
     nvm use --delete-prefix $NODE_VERSION && \
-    npm config set prefix '$NPM_CACHE' && \
     echo 'export PATH=$PATH' >> '$USER_HOME/.bashrc' && \
     source $USER_HOME/.bashrc && \
     npm cache -g clean --force && \
     npm ci --cache=$NPM_CACHE"
 
-# Install additional Node.js packages globally
+# Install Cypress and additional NodeJS packages globally
 RUN /bin/bash -c "source $NVM_DIR/nvm.sh && \
-    npm install -g junit-report-merger"
+    nvm use $NODE_VERSION && \
+    npm install --prefix=$NPM_CACHE -g \
+    cypress \
+    junit-report-merger"
 
 # Export NPM and Cypress Cache directories (to be accessible by rootless user)
 ENV NPM_CONFIG_CACHE $NPM_CACHE
@@ -94,7 +97,6 @@ ENV CYPRESS_CACHE_FOLDER $CYPRESS_CACHE
 
 # Set up environment variables for tools
 ENV DISPLAY=:99
-ENV CHROME_RPM="$CHROME"
 ENV OCM_CLI="$OCM_CLI"
 
 # Label the Image

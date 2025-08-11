@@ -17,22 +17,18 @@ USER root
 RUN mkdir -p "$USER_HOME"
 RUN useradd -m -g root "$USER" -d "$USER_HOME" --uid 1000
 RUN chown -R "$USER:root" "$USER_HOME"
-RUN chmod -R 770 "$USER_HOME"
 
 # Create global NPM cache directory
 RUN mkdir -p "$NPM_CACHE"
-RUN chgrp -R 0 "$NPM_CACHE"
-RUN chmod -R 770 "$NPM_CACHE"
+RUN chown -R "$USER:root" "$NPM_CACHE"
 
 # Create local Cypress cache directory
 RUN mkdir -p "$CYPRESS_CACHE"
-RUN chgrp -R 0 "$CYPRESS_CACHE"
-RUN chmod -R 770 "$CYPRESS_CACHE"
+RUN chown -R "$USER:root" "$CYPRESS_CACHE"
 
 # Create local Poetry cache directory
 RUN mkdir -p "$POETRY_CACHE"
-RUN chown -R 0 "$POETRY_CACHE"
-RUN chmod -R 770 "$POETRY_CACHE"
+RUN chown -R "$USER:root" "$POETRY_CACHE"
 
 # Install tools including Xvfb, Chrome, and additional required packages
 RUN dnf update -y
@@ -104,6 +100,14 @@ RUN /bin/bash -c "source $NVM_DIR/nvm.sh && \
     npm install --prefix=$NPM_CACHE -g \
     cypress \
     junit-report-merger"
+
+# Fix ownership of all cache directories and files as root
+USER root
+RUN chmod -R 777 "$USER_HOME"
+RUN chmod -R 777 "$NPM_CACHE"
+RUN chmod -R 777 "$CYPRESS_CACHE"
+RUN chmod -R 777 "$POETRY_CACHE"
+USER $USER
 
 # Export NPM, Cypress and Poetry Cache directories (to be accessible by rootless user)
 ENV NPM_CONFIG_CACHE $NPM_CACHE

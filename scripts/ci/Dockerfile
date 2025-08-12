@@ -16,7 +16,8 @@ USER root
 # Add local user to avoid permissions issues during job execution
 RUN mkdir -p "$USER_HOME"
 RUN useradd -m -g root "$USER" -d "$USER_HOME" --uid 1000
-RUN chown -R "$USER:root" "$USER_HOME"
+RUN chgrp -R 0 "$USER_HOME"
+RUN chmod -R g=u "$USER_HOME"
 
 # Create global NPM cache directory
 RUN mkdir -p "$NPM_CACHE"
@@ -31,6 +32,8 @@ RUN mkdir -p "$POETRY_CACHE"
 RUN chown -R "$USER:root" "$POETRY_CACHE"
 
 # Install tools including Xvfb, Chrome, and additional required packages
+# Note: Chrome permission issues in Jenkins are fixed by giving the cypress user
+# full permissions to run Chrome with the necessary capabilities
 RUN dnf update -y
 RUN dnf install --nodocs -y \
     wget \
@@ -51,7 +54,25 @@ RUN dnf install --nodocs -y \
     gcc \
     gcc-c++ \
     make \
+    libcap \
+    skopeo \
     "$CHROME"
+
+# Simple fix: Give the cypress user the capabilities it needs to run Chrome
+RUN setcap 'cap_sys_nice+ep cap_sys_resource+ep cap_sys_ptrace+ep' /usr/bin/google-chrome-stable || true
+RUN setcap 'cap_sys_nice+ep cap_sys_resource+ep cap_sys_ptrace+ep' /usr/bin/google-chrome || true
+RUN setcap 'cap_sys_nice+ep cap_sys_resource+ep cap_sys_ptrace+ep' /usr/bin/chrome || true
+
+# Ensure the cypress user owns Chrome and has full permissions
+RUN chown cypress:0 /usr/bin/google-chrome-stable && \
+    chmod 755 /usr/bin/google-chrome-stable
+
+# Set Chrome environment variables to avoid permission issues
+ENV CHROME_NO_SANDBOX=true
+ENV CHROME_DISABLE_DEV_SHM=true
+ENV CHROME_DISABLE_GPU=true
+ENV CHROME_DISABLE_WEB_SECURITY=true
+ENV CHROME_DISABLE_FEATURES=VizDisplayCompositor
 
 # Install OCP client
 RUN wget -qO- "$OCP_CLI" | tar zxv -C /usr/local/bin/ oc kubectl
@@ -117,6 +138,16 @@ ENV POETRY_CACHE_DIR $POETRY_CACHE
 # Set up environment variables for tools
 ENV DISPLAY=:99
 ENV OCM_CLI="$OCM_CLI"
+
+# Set Chrome environment variables to handle permission issues
+ENV CHROME_NO_SANDBOX=true
+ENV CHROME_DISABLE_DEV_SHM=true
+ENV CHROME_DISABLE_GPU=true
+ENV CHROME_DISABLE_WEB_SECURITY=true
+ENV CHROME_DISABLE_FEATURES=VizDisplayCompositor
+ENV CHROME_ARGS="--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-web-security --disable-features=VizDisplayCompositor --disable-oom-score-adjustment --disable-setuid-sandbox --no-first-run --no-default-browser-check --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=TranslateUI --disable-ipc-flooding-protection --disable-zygote --disable-oom-score-adjustment"
+
+# The cypress user now has full permissions to run Chrome directly
 
 # Label the Image
 LABEL io.opendatahub.component="odh-cypress" \

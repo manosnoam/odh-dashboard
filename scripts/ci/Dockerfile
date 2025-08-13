@@ -1,155 +1,86 @@
-FROM quay.io/fedora/fedora:42
+# Use the official Cypress image with Cypress v13 pre-installed.
+# This saves time by not needing to download Cypress during the build.
+FROM docker.io/cypress/included:13.13.0
 
-ARG USER=cypress
-ARG USER_HOME=/home/$USER
-ARG NPM_CACHE=/opt/app-root/src/.npm-global
-ARG CYPRESS_CACHE=$USER_HOME/.cypress-cache
-ARG POETRY_CACHE=$USER_HOME/.poetry-cache
-ARG CHROME=https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+# Define ARGs for tool versions for clarity
 ARG OCP_CLI=https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
-ARG NVM_INSTALLER=https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh
-ARG NODE_VERSION=v20.18.0
 ARG OCM_CLI=https://github.com/openshift-online/ocm-cli/releases/download/v1.0.7/ocm-linux-amd64
+ARG YQ_VERSION=v4.44.2
 
+# Switch to root user to install additional pipeline tools
 USER root
 
-# Add local user to avoid permissions issues during job execution
-RUN mkdir -p "$USER_HOME"
-RUN useradd -m -g root "$USER" -d "$USER_HOME" --uid 1000
-RUN chgrp -R 0 "$USER_HOME"
-RUN chmod -R g=u "$USER_HOME"
-
-# Create global NPM cache directory
-RUN mkdir -p "$NPM_CACHE"
-RUN chown -R "$USER:root" "$NPM_CACHE"
-
-# Create local Cypress cache directory
-RUN mkdir -p "$CYPRESS_CACHE"
-RUN chown -R "$USER:root" "$CYPRESS_CACHE"
-
-# Create local Poetry cache directory
-RUN mkdir -p "$POETRY_CACHE"
-RUN chown -R "$USER:root" "$POETRY_CACHE"
-
-# Install tools including Xvfb, Chrome, and additional required packages
-# Note: Chrome permission issues in Jenkins are fixed by giving the cypress user
-# full permissions to run Chrome with the necessary capabilities
-RUN dnf update -y
-RUN dnf install --nodocs -y \
+# Install system-level dependencies for other tools.
+# The Cypress base image is Debian, so we use apt-get.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
-    xz \
+    xz-utils \
     jq \
     git \
-    xorg-x11-server-Xvfb \
-    krb5-workstation \
+    krb5-user \
     python3-pip \
-    python3.11 \
-    python3.11-devel \
-    yq \
-    python3-distro \
+    python3-dev \
     curl \
     openssl \
-    chromedriver \
     gcc \
-    gcc-c++ \
+    g++ \
     make \
-    libcap \
+    libcap2-bin \
     skopeo \
-    "$CHROME"
+    && rm -rf /var/lib/apt/lists/*
 
-# Simple fix: Give the cypress user the capabilities it needs to run Chrome
-RUN setcap 'cap_sys_nice+ep cap_sys_resource+ep cap_sys_ptrace+ep' /usr/bin/google-chrome-stable || true
-RUN setcap 'cap_sys_nice+ep cap_sys_resource+ep cap_sys_ptrace+ep' /usr/bin/google-chrome || true
-RUN setcap 'cap_sys_nice+ep cap_sys_resource+ep cap_sys_ptrace+ep' /usr/bin/chrome || true
+# Install yq
+RUN wget "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -O /usr/bin/yq && \
+    chmod +x /usr/bin/yq
 
-# Ensure the cypress user owns Chrome and has full permissions
-RUN chown cypress:0 /usr/bin/google-chrome-stable && \
-    chmod 755 /usr/bin/google-chrome-stable
-
-# Set Chrome environment variables to avoid permission issues
-ENV CHROME_NO_SANDBOX=true
-ENV CHROME_DISABLE_DEV_SHM=true
-ENV CHROME_DISABLE_GPU=true
-ENV CHROME_DISABLE_WEB_SECURITY=true
-ENV CHROME_DISABLE_FEATURES=VizDisplayCompositor
-
-# Install OCP client
+# Install OCP client (oc)
 RUN wget -qO- "$OCP_CLI" | tar zxv -C /usr/local/bin/ oc kubectl
 
-# Install OCM CLI
+# Install OCM CLI (ocm)
 RUN curl -Lo /usr/local/bin/ocm "$OCM_CLI" && \
     chmod +x /usr/local/bin/ocm
 
-# Install Python Poetry
-RUN pip3 install poetry
+# Install Python tools, allowing system packages modification
+RUN pip3 install --break-system-packages poetry distro
 
-# Clean system cache
-RUN dnf clean all
-RUN rm -rf /var/cache/yum
+# Create the home directory for the cypress user
+RUN mkdir -p /home/cypress
 
-# Set capability to adjust OOM score for Node
-RUN echo CAP_SYS_NICE >> /etc/security/limits.conf
+# Give group write permissions for OpenShift/Jenkins compatibility
+RUN chmod -R g+w /home/cypress
 
-# Copy NodeJS packages lists (json files) from "frontend" directory
-WORKDIR $USER_HOME
-COPY ./frontend/package*.json ./
-RUN chown $USER:0 ./*
+# Set the working directory for the application
+WORKDIR /e2e
 
-# Switch to the user, export env variables, and prepare NVM directories
-USER $USER
-ENV USER $USER
-ENV HOME $USER_HOME
-ENV NVM_DIR $USER_HOME/nvm
-ENV NODE_PATH "$NVM_DIR/versions/node/$NODE_VERSION/lib/node_modules"
-ENV PATH "$NVM_DIR/versions/node/$NODE_VERSION/bin:/bin:$HOME/.local/bin:/root/.local/bin:/usr/local/bin:$NPM_CACHE/bin:/usr/bin:$PATH"
-RUN mkdir -p $NVM_DIR
+# Copy application code into the container
+COPY . .
 
-# Install Node Version Manager, NodeJS and the packages for CI (package-lock.json)
-RUN curl -o- $NVM_INSTALLER | bash
-RUN /bin/bash -c "source $NVM_DIR/nvm.sh && \
-    nvm install $NODE_VERSION && \
-    nvm use --delete-prefix $NODE_VERSION && \
-    echo 'export PATH=$PATH' >> '$USER_HOME/.bashrc' && \
-    source $USER_HOME/.bashrc && \
-    npm cache -g clean --force && \
-    npm ci --cache=$NPM_CACHE"
+# Install project dependencies (excluding Cypress, which is already in the image)
+# The --network-timeout flag helps prevent failures on slow networks.
+RUN npm ci --network-timeout 600000
 
-# Install Cypress and additional NodeJS packages globally
-RUN /bin/bash -c "source $NVM_DIR/nvm.sh && \
-    nvm use $NODE_VERSION && \
-    npm install --prefix=$NPM_CACHE -g \
-    cypress \
-    junit-report-merger"
+# Set ownership of the project directory to the cypress user (UID 1000)
+# This is the default non-root user in the cypress base images.
+RUN chown -R 1000:1000 /e2e
 
-# Fix ownership of all cache directories and files as root
+# Create a writable font cache directory for the non-root user
 USER root
-RUN chmod -R 777 "$USER_HOME"
-RUN chmod -R 777 "$NPM_CACHE"
-RUN chmod -R 777 "$CYPRESS_CACHE"
-RUN chmod -R 777 "$POETRY_CACHE"
-USER $USER
+RUN mkdir -p /home/cypress/.cache/fontconfig && \
+    chown -R 1000:1000 /home/cypress/.cache
 
-# Export NPM, Cypress and Poetry Cache directories (to be accessible by rootless user)
-ENV NPM_CONFIG_CACHE $NPM_CACHE
-ENV CYPRESS_CACHE_FOLDER $CYPRESS_CACHE
-ENV POETRY_CACHE_DIR $POETRY_CACHE
+# Switch to the non-root cypress user
+USER 1000
+ENV FONTCONFIG_PATH=/etc/fonts
+ENV FONTCONFIG_CACHE_DIR=/home/cypress/.cache/fontconfig
 
-# Set up environment variables for tools
-ENV DISPLAY=:99
-ENV OCM_CLI="$OCM_CLI"
+# Set environment variable for global git config to be in a writable location
+ENV GIT_CONFIG_GLOBAL=/home/cypress/.gitconfig
 
-# Set Chrome environment variables to handle permission issues
-ENV CHROME_NO_SANDBOX=true
-ENV CHROME_DISABLE_DEV_SHM=true
-ENV CHROME_DISABLE_GPU=true
-ENV CHROME_DISABLE_WEB_SECURITY=true
-ENV CHROME_DISABLE_FEATURES=VizDisplayCompositor
-ENV CHROME_ARGS="--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-web-security --disable-features=VizDisplayCompositor --disable-oom-score-adjustment --disable-setuid-sandbox --no-first-run --no-default-browser-check --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-features=TranslateUI --disable-ipc-flooding-protection --disable-zygote --disable-oom-score-adjustment"
+# Set environment variable for kubeconfig to be in a writable location
+ENV KUBECONFIG=/home/cypress/.kube/config
 
-# The cypress user now has full permissions to run Chrome directly
-
-# Label the Image
+# Label the Image for identification
 LABEL io.opendatahub.component="odh-cypress" \
       io.k8s.display-name="odh-cypress" \
       name="open-data-hub/odh-cypress" \

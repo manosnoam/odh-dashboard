@@ -1,4 +1,3 @@
-# Dummy Test Quay Trigger
 FROM quay.io/fedora/fedora:42
 
 ARG USER=cypress

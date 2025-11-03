@@ -1,10 +1,5 @@
 import { DashboardCommonConfig } from '#~/k8sTypes';
-import {
-  StackCapability,
-  SupportedArea,
-  SupportedAreasState,
-  DataScienceStackComponent,
-} from './types';
+import { SupportedArea, SupportedAreasState, DataScienceStackComponent } from './types';
 
 export const techPreviewFlags = {
   disableModelRegistry: true,
@@ -14,7 +9,6 @@ export const techPreviewFlags = {
 
 export const devTemporaryFeatureFlags = {
   disableKueue: true,
-  disableLlamaStackChatBot: true, // internal dev only
   disableProjectScoped: true,
 } satisfies Partial<DashboardCommonConfig>;
 
@@ -114,7 +108,6 @@ export const SupportedAreasStateMap: SupportedAreasState = {
   [SupportedArea.K_SERVE_AUTH]: {
     featureFlags: ['disableKServeAuth'],
     reliantAreas: [SupportedArea.K_SERVE],
-    requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
   },
   [SupportedArea.K_SERVE_METRICS]: {
     featureFlags: ['disableKServeMetrics'],
@@ -190,11 +183,6 @@ export const SupportedAreasStateMap: SupportedAreasState = {
       SupportedArea.MODEL_CATALOG,
       SupportedArea.MODEL_REGISTRY,
     ],
-  },
-  [SupportedArea.LLAMA_STACK_CHAT_BOT]: {
-    featureFlags: ['disableLlamaStackChatBot'],
-    reliantAreas: [SupportedArea.MODEL_SERVING],
-    //TODO: Add Llama Stack component when details known.
   },
   [SupportedArea.LM_EVAL]: {
     featureFlags: ['disableLMEval'],
